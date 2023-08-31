@@ -8,7 +8,7 @@ pipeline {
 
     environment {
         registry = "rafath25/vproappdock"
-        registryCredentials = 'dockerhub'
+        registryCredential = 'dockerhub'
         
     }
 
