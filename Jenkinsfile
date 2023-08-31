@@ -1,51 +1,61 @@
 pipeline {
+
     agent any
-
-    tools {
-        maven "MAVEN3"
+/*
+	tools {
+        maven "maven3"
     }
-
+*/
     environment {
-        registry = "rafath25/vproappdock"
-        registryCredential = 'dockerhub'
+        registry = "rafath25/vproapp"
+        registryCredentials = 'dockerhub'
+        
     }
 
-    stages {
-        stage ('BUILD') {
+    stages{
+
+        
+        stage('BUILD'){
             steps {
                 sh 'mvn clean install -DskipTests'
             }
             post {
                 success {
-                    echo 'Now Archiving..'
+                    echo 'Now Archiving...'
                     archiveArtifacts artifacts: '**/target/*.war'
                 }
             }
         }
-        stage ('UNIT TEST') {
+
+        stage('UNIT TEST'){
             steps {
                 sh 'mvn test'
             }
         }
-        stage ('INTEGRATION TEST'){
+
+        stage('INTEGRATION TEST'){
             steps {
                 sh 'mvn verify -DskipUnitTests'
             }
         }
+
         stage ('CODE ANALYSIS WITH CHECKSTYLE'){
             steps {
                 sh 'mvn checkstyle:checkstyle'
             }
             post {
                 success {
-                    echo 'Generated Analysis result'
+                    echo 'Generated Analysis Result'
                 }
             }
         }
-        stage ('CODE ANALYSIS WITH SONARQUBE') {
+
+        stage('CODE ANALYSIS with SONARQUBE') {
+
             environment {
                 scannerHome = tool 'mysonarscanner4'
             }
+
             steps {
                 withSonarQubeEnv('sonar-pro') {
                     sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
@@ -57,39 +67,43 @@ pipeline {
                    -Dsonar.jacoco.reportsPath=target/jacoco.exec \
                    -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
                 }
-                timeout (time: 10, unit: 'MINUTES') {
+
+                timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
-           }
-        }
-        stage('Build Docker App Image'){
-            steps{
-              script{
-                dockerImage = docker.build registry + ":V$BUILD_NUMBER"
             }
         }
-    }
-    stage('Upload Image'){
-        steps{
-            script{
-                docker.withRegistry('', registryCredential){
-                    dockerImage.push("V$BUILD_NUMBER")
-                    dockerImage.push('latest')
-                }
-            }
-        }
-    }
-    stage('Remove Unused docker image') {
-        steps{
-            sh "docker rmi $registry:V$BUILD_NUMBER"
-        }
-    }
-    stage('Kubernetes Deploy'){
-        agent {label 'KOPS'}
+        stage('Build Docker App Image') {
           steps{
-            sh "helm upgrade --install --force app-stack helm/vprofilecharts --set appimage=${registry}:V${BUILD_NUMBER} --namespace prod"
+            script{
+              dockerImage = docker.build registry + ":V$BUILD_NUMBER"
+            }
           }
-    }
+        }
+        stage('Upload Image'){
+          steps{
+            script {
+              docker.withRegistry('', registryCredential) {
+                dockerImage.push("V$BUILD_NUMBER")
+                dockerImage.push('latest')
+              }
+            }
+          }
+        }
+        
+        stage('Remove Unused docker image') {
+          steps{
+            sh "docker rmi $registry:V$BUILD_NUMBER"
+          }
+        }
 
-}
+        stage('Kubernetes Deploy') {
+          agent {label 'KOPS'}
+            steps {
+              sh "helm upgrade --install --force app-stack helm/vprofilecharts --set appimage=${registry}:V${BUILD_NUMBER} -n prod"
+            }
+        }
+     }
+
+
 }
